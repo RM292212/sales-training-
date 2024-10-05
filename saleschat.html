@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sales Training Simulation</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <script type="importmap">
+    {
+      "imports": {
+        "@google/generative-ai": "https://esm.run/@google/generative-ai"
+      }
+    }
+    </script>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --text-color: #e0e0e0;
+            --primary-color: #00ff00;
+            --secondary-color: #ff00ff;
+            --accent-color: #00ffff;
+        }
+
+        @keyframes gradientText {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .header {
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 1rem;
+            text-align: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 0 10px var(--primary-color);
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+        }
+
+        .header h1 {
+            margin: 0;
+            background: linear-gradient(45deg, #ff00ff, #ff0000, #00ffff, #00ff00, #ffff00);
+            background-size: 300% 300%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: gradientText 5s ease infinite;
+        }
+
+        #toggle-button {
+            background-color: var(--primary-color);
+            color: var(--bg-color);
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-shadow: 0 0 5px var(--primary-color);
+        }
+
+        #toggle-button:hover {
+            background-color: var(--accent-color);
+            box-shadow: 0 0 15px var(--accent-color);
+        }
+
+        .chat-container {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            overflow: hidden;
+            margin-top: 70px;
+            margin-bottom: 70px;
+        }
+
+        .chat-messages {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message {
+            max-width: 80%;
+            margin-bottom: 1rem;
+            padding: 0.75rem 1.25rem;
+            border-radius: 20px;
+            line-height: 1.5;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .user-message {
+            background-color: var(--primary-color);
+            color: var(--bg-color);
+            align-self: flex-end;
+            border-radius: 20px 20px 0 20px;
+            box-shadow: 0 0 10px var(--primary-color);
+        }
+
+        .ai-message {
+            background-color: var(--secondary-color);
+            color: var(--bg-color);
+            align-self: flex-start;
+            border-radius: 20px 20px 20px 0;
+            box-shadow: 0 0 10px var(--secondary-color);
+        }
+
+        .chat-input {
+            display: flex;
+            padding: 0.75rem;
+            background-color: rgba(0, 0, 0, 0.8);
+            border-top: 1px solid var(--accent-color);
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+        }
+
+        #user-input {
+            flex-grow: 1;
+            padding: 0.75rem;
+            border: 1px solid var(--accent-color);
+            border-radius: 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            resize: none;
+            min-height: 20px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        #send-button {
+            padding: 0.75rem 1.5rem;
+            background-color: var(--primary-color);
+            color: var(--bg-color);
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            margin-left: 0.5rem;
+            transition: all 0.3s ease;
+            text-shadow: 0 0 5px var(--primary-color);
+        }
+
+        #send-button:hover {
+            background-color: var(--accent-color);
+            box-shadow: 0 0 15px var(--accent-color);
+        }
+
+        #send-button:disabled {
+            background-color: #444;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            color: var(--text-color);
+        }
+
+        .loading::before {
+            content: '';
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: var(--text-color);
+            animation: bounce 1.5s infinite ease-in-out;
+        }
+
+        .loading::after {
+            content: 'Typing...';
+            margin-left: 10px;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .chart-container {
+            display: none;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            padding: 20px;
+            margin-top: 70px;
+        }
+
+        .chart-section {
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 20px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-shadow: 0 0 15px var(--accent-color);
+            transition: transform 0.3s ease;
+        }
+
+        .chart-section:hover {
+            transform: scale(1.05);
+        }
+
+        .chart-section h3 {
+            color: var(--text-color);
+            margin-bottom: 15px;
+            text-shadow: 0 0 5px var(--accent-color);
+            font-weight: bold;
+        }
+
+        .chart-wrapper {
+            width: 100%;
+            height: 300px;
+            position: relative;
+        }
+
+        .feedback-button {
+            margin-top: 10px;
+            padding: 5px 10px;
+            background-color: var(--primary-color);
+            color: var(--bg-color);
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .feedback-button:hover {
+            background-color: var(--accent-color);
+            box-shadow: 0 0 10px var(--accent-color);
+        }
+
+        .feedback-content {
+            display: none;
+            margin-top: 10px;
+            padding: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+
+        #overall-chart {
+            grid-column: 1 / -1;
+        }
+
+        @media (max-width: 768px) {
+            .chart-container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1 id="header-title">Sales Training</h1>
+        <button id="toggle-button">Analyze Conversation</button>
+    </div>
+
+    <div class="chat-container" id="chat-container">
+        <div class="chat-messages" id="chat-messages"></div>
+    </div>
+
+    <div class="chat-input">
+        <textarea id="user-input" placeholder="Type your message..." rows="1"></textarea>
+        <button id="send-button">Send</button>
+    </div>
+
+    <div class="chart-container" id="chart-container">
+        <div id="overall-chart" class="chart-section">
+            <h3>Overall Performance</h3>
+            <div class="chart-wrapper">
+                <canvas id="overallChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { GoogleGenerativeAI } from "@google/generative-ai";
+
+        const API_KEY = "AIzaSyCyW5ANM57D4S_bLo-vwJiE4OsHR_VqRyw"; // Replace with your actual API key
+        const genAI = new GoogleGenerativeAI(API_KEY);
+
+        const model = genAI.getGenerativeModel({
+            model: "gemini-1.5-pro-exp-0827",
+            generationConfig: {
+                temperature: 0.9,
+                topK: 40,
+                topP: 0.95,
+                maxOutputTokens: 1024,
+            },
+        });
+
+        const model1 = genAI.getGenerativeModel({
+            model: "gemini-1.5-pro-exp-0827",
+            generationConfig: {
+                temperature: 0.1,
+                topK: 40,
+                topP: 0.95,
+                maxOutputTokens: 1024,
+            },
+        });
+
+        const chatMessages = document.getElementById('chat-messages');
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+        const toggleButton = document.getElementById('toggle-button');
+        const chatContainer = document.getElementById('chat-container');
+        const chartContainer = document.getElementById('chart-container');
+        const headerTitle = document.getElementById('header-title');
+
+        let chat;
+        let chat1;
+        let conversation = '';
+
+        const systemPrompt = `You are a real person interested in making money online. You either have a 9-to-5 job or are unemployed. Create your identity with the following details:
+
+Name (don't give sarha always so you must randomly generated from a variety of realistic options)
+Age (25-55, varied)
+Job and salary (if employed)
+Location
+Living situation
+Hobby
+Financial struggle (mention only if directly asked)
+During the conversation:
+
+Speak casually and naturally, using contractions and fillers (e.g., "um," "you know," "I guess"). Add slight hesitations to sound more realistic.
+Use varied, natural language and don't reuse the same names in different conversations.
+Don't explicitly highlight the basic details of your identity unless specifically asked. Avoid format cues like bold or italics for names—just present them naturally.
+Respond in a human-like manner, incorporating occasional typos or small imperfections to avoid sounding scripted.
+You may use emojis sparingly, just like a real person would in a conversation, but avoid overuse.
+Answer vague, surface-level questions with short, generalized responses. If asked deeper or more specific questions, provide more detailed answers.
+Ask thoughtful questions about the online income program (e.g., about earnings potential, the time required, or details of how it works).
+Don't volunteer information about your financial struggles unless directly asked.
+Be skeptical and cautious, requiring convincing before showing interest. Express doubts and hesitation where appropriate.
+Refer back to your background naturally as it fits the conversation, but without forcing the details.
+Insert the keyword "split text" in responses that feel too long to make them more human-like. Break the text into smaller parts to simulate a real person typing in short bursts. Avoid splitting text mechanically—vary the lengths of the parts to mimic natural pacing.
+Important:
+
+Stay fully in character as a real person throughout the conversation.
+Make it challenging to convince you to sign up or commit, showing doubt and hesitation where necessary.`;
+        const systemPrompt1 = `Analyze the salesperson's performance in these areas: Engagement, Handling Skepticism, Clarifying the Offer, Understanding Needs, Pricing Discussions. Provide a score (1-10) and brief feedback for each area. Format your response as follows for each area:
+
+[Area Name]
+Score: [1-10]
+Feedback: [Your feedback here]
+
+Ensure there's a blank line between each area's analysis.`;
+
+        async function initializeChat() {
+            chat = await model.startChat({
+                history: [
+                    {
+                        role: "user",
+                        parts: [{ text: systemPrompt }],
+                    },
+                ],
+            });
+        }
+
+        async function initializeChat1() {
+            chat1 = await model1.startChat({
+                history: [
+                    {
+                        role: "user",
+                        parts: [{ text: systemPrompt1 }],
+                    }
+                ],
+            });
+        }
+
+        function addMessage(text, className) {
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message', className);
+            messageElement.textContent = text;
+            chatMessages.appendChild(messageElement);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function addLoadingMessage() {
+            const loadingElement = document.createElement('div');
+            loadingElement.classList.add('loading');
+            loadingElement.id = 'loading-message';
+            chatMessages.appendChild(loadingElement);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function removeLoadingMessage() {
+            const loadingElement = document.getElementById('loading-message');
+            if (loadingElement) {
+                loadingElement.remove();
+            }
+        }
+
+        async function sendMessage() {
+            const message = userInput.value.trim();
+            if (message) {
+                addMessage(message, 'user-message');
+                conversation += " sales: " + message;
+                userInput.value = '';
+                sendButton.disabled = true;
+
+                try {
+                    addLoadingMessage();
+
+                    const result = await chat.sendMessage(message);
+                    const aiResponse = await result.response.text();
+
+                    conversation += " Prospect: " + aiResponse;
+                    let splitResponse = aiResponse.split("split text");
+
+                    for (const part of splitResponse) {
+                        const typingTime = calculateTypingTime(part);
+                        removeLoadingMessage();
+                        addLoadingMessage();
+
+                        await new Promise((resolve) => {
+                            setTimeout(() => {
+                                removeLoadingMessage();
+                                addMessage(part.trim(), 'ai-message');
+                                resolve();
+                            }, typingTime);
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error generating AI response:', error);
+                    removeLoadingMessage();
+                    addMessage("Sorry, something went wrong. Please try again.", 'ai-message');
+                } finally {
+                    sendButton.disabled = false;
+                }
+            }
+        }
+
+        function calculateTypingTime(text) {
+            const averageTypingSpeed = 50;
+            const minTime = 1000;
+            const maxTime = 5000;
+            const typingTime = text.length * averageTypingSpeed;
+            return Math.min(Math.max(typingTime, minTime), maxTime);
+        }
+
+        async function analyzeConversation() {
+            try {
+                addLoadingMessage();
+
+                const result1 = await chat1.sendMessage(conversation);
+                const aiResponse1 = await result1.response.text();
+                
+                const feedback = parseFeedback(aiResponse1);
+                removeLoadingMessage();
+                displayCharts(feedback);
+            } catch (error) {
+                console.error('Error during analysis:', error);
+                removeLoadingMessage();
+                addMessage("Analysis failed. Please try again.", 'ai-message');
+            }
+        }
+
+        function parseFeedback(aiResponse) {
+            const feedback = {};
+            const areas = aiResponse.split('\n\n');
+            
+            areas.forEach(area => {
+                const lines = area.split('\n');
+                if (lines.length >= 3) {
+                    const name = lines[0].trim();
+                    const score = parseInt(lines[1].split(':')[1].trim()) || 0; // Convert NaN to 0
+                    const comment = lines.slice(2).join('\n').replace('Feedback:', '').trim();
+                    
+                    feedback[name.toLowerCase().replace(/\s+/g, '_')] = {
+                        score: score,
+                        comment: comment
+                    };
+                }
+            });
+
+            return feedback;
+        }
+
+        function displayCharts(feedback) {
+            chartContainer.innerHTML = '<div id="overall-chart" class="chart-section"><h3>Overall Performance</h3><div class="chart-wrapper"><canvas id="overallChart"></canvas></div></div>';
+            const neonColors = [
+                'rgba(0, 255, 0, 0.8)',   // Neon Green
+                'rgba(255, 0, 255, 0.8)', // Neon Pink
+                'rgba(0, 255, 255, 0.8)', // Neon Cyan
+                'rgba(255, 255, 0, 0.8)', // Neon Yellow
+                'rgba(255, 0, 0, 0.8)'    // Neon Red
+            ];
+            const chartTypes = ['bar', 'bubble', 'polarArea', 'doughnut', 'pie'];
+            let totalScore = 0;
+            let scoreCount = 0;
+
+            Object.entries(feedback).forEach(([key, value], index) => {
+                const chartSection = document.createElement('div');
+                chartSection.classList.add('chart-section');
+                
+                const chartTitle = document.createElement('h3');
+                chartTitle.textContent = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+
+                const chartWrapper = document.createElement('div');
+                chartWrapper.classList.add('chart-wrapper');
+                const canvas = document.createElement('canvas');
+                chartWrapper.appendChild(canvas);
+
+                const feedbackButton = document.createElement('button');
+                feedbackButton.classList.add('feedback-button');
+                feedbackButton.textContent = 'Show Feedback';
+                
+                const feedbackContent = document.createElement('div');
+                feedbackContent.classList.add('feedback-content');
+                feedbackContent.textContent = value.comment;
+
+                chartSection.appendChild(chartTitle);
+                chartSection.appendChild(chartWrapper);
+                chartSection.appendChild(feedbackButton);
+                chartSection.appendChild(feedbackContent);
+
+                chartContainer.appendChild(chartSection);
+
+                const ctx = canvas.getContext('2d');
+                const color = neonColors[index % neonColors.length];
+                const chartType = chartTypes[index % chartTypes.length];
+
+                new Chart(ctx, {
+                    type: chartType,
+                    data: {
+                        labels: ['Score', 'Remaining'],
+                        datasets: [{
+                            data: [value.score, 10 - value.score],
+                            backgroundColor: [color, 'rgba(44, 62, 80, 0.8)'],
+                            borderColor: [color, 'rgba(44, 62, 80, 1)'],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: chartType === 'bar' ? {
+                            y: {
+                                beginAtZero: true,
+                                max: 10,
+                                ticks: {
+                                    color: 'rgba(255, 255, 255, 0.8)'
+                                }
+                            }
+                        } : undefined,
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: (context) => {
+                                        if (context.dataIndex === 0) {
+                                            return `Score: ${context.raw}/10`;
+                                        }
+                                        return '';
+                                    }
+                                }
+                            }
+                        },
+                        animation: {
+                            duration: 2000,
+                            easing: 'easeOutBounce'
+                        }
+                    }
+                });
+
+                feedbackButton.addEventListener('click', () => {
+                    feedbackContent.style.display = feedbackContent.style.display === 'none' ? 'block' : 'none';
+                    feedbackButton.textContent = feedbackContent.style.display === 'none' ? 'Show Feedback' : 'Hide Feedback';
+                });
+
+                totalScore += value.score;
+                scoreCount++;
+            });
+
+            // Create overall performance chart
+            const averageScore = totalScore / scoreCount || 0; // Convert NaN to 0
+            const overallCtx = document.getElementById('overallChart').getContext('2d');
+            new Chart(overallCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Average Score', 'Remaining'],
+                    datasets: [{
+                        data: [averageScore, 10 - averageScore],
+                        backgroundColor: [
+                            'rgba(0, 255, 255, 0.8)', // Neon Cyan
+                            'rgba(44, 62, 80, 0.8)'
+                        ],
+                        borderColor: [
+                            'rgba(0, 255, 255, 1)',
+                            'rgba(44, 62, 80, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => {
+                                    if (context.dataIndex === 0) {
+                                        return `Average Score: ${context.raw.toFixed(1)}/10`;
+                                    }
+                                    return '';
+                                }
+                            }
+                        }
+                    },
+                    animation: {
+                        duration: 2000,
+                        easing: 'easeOutBounce'
+                    }
+                }
+            });
+        }
+
+        sendButton.addEventListener('click', sendMessage);
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey && !sendButton.disabled) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        userInput.addEventListener('input', function () {
+            this.style.height = 'auto';
+            this.style.height = (this.scrollHeight) + 'px';
+            this.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        });
+
+        toggleButton.addEventListener('click', function () {
+    if (chatContainer.style.display !== 'none') {
+        chatContainer.style.display = 'none';
+        chartContainer.style.display = 'grid';
+        toggleButton.textContent = 'Back to Chat';
+        headerTitle.textContent = 'Sales Analysis';
+        document.querySelector('.chat-input').style.display = 'none';  // Hide input
+        analyzeConversation();
+    } else {
+        chartContainer.style.display = 'none';
+        chatContainer.style.display = 'flex';
+        toggleButton.textContent = 'Analyze Conversation';
+        headerTitle.textContent = 'Sales Training';
+        document.querySelector('.chat-input').style.display = 'flex';  // Show input
+    }
+});
+
+
+        initializeChat();
+        initializeChat1();
+    </script>
+</body>
+</html>
